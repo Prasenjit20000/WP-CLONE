@@ -3,6 +3,8 @@ const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const connectDb = require('./config/dbConnect');
+const bodyParser = require('body-parser');
+const authRoute = require('./routes/authRoute')
 
 dotenv.config();
 
@@ -14,9 +16,18 @@ const app = express();
 // dev->nodemon index.js for development npm run dev
 
 
+
+// Middleware
+app.use(express.json()); //parse body data
+app.use(cookieParser()); // parse token on every request
+app.use(bodyParser.urlencoded({extended:true}));
+
 // database connection
 connectDb();
 
+
+// routes
+app.use('/api/auth',authRoute);
 
 
 app.listen(PORT,()=>{
