@@ -5,7 +5,7 @@ const response = require("../utils/responseHandler");
 const twilloService = require('../services/twilloService');
 const generateToken = require("../utils/generateToken");
 const { uploadFileToClodinary } = require("../config/cloudinaryConfig");
-
+const Conversation = require('../models/Conversation')
 
 
 // 1.send otp
@@ -89,6 +89,24 @@ const verifyOtp = async (req, res) => {
     }
 }
 
+const checkAuthticate = async(req,res)=>{
+    try {
+        const userId = req.user.userId;
+        if(!userId){
+            return response(res,404,'User unauthorized,please login before access!');
+        }
+        const user = await User.findById(userId);
+        if(!user){
+            return response(res,404,'User not found');
+        }
+        // check every case user is authenticated or not
+        return response(res,200,'User authenticated',user);
+    } catch (error) {
+        console.error(error);
+        return response(res,500,'Internal server error.');
+    }
+}
+
 const updateProfile = async(req,res) =>{
     const {username,agreed,about} = req.body;
     const userId = req.user.userId;
@@ -119,6 +137,49 @@ const updateProfile = async(req,res) =>{
     }
 }
 
+
+const logout = (req,res)=>{
+    try {
+        res.cookie("authToken","",{expires:new Date(0)});
+        return response(res,200,'Logout successfully.');
+    } catch (error) {
+        console.error(error);
+        return response(res,500,'Internal server error');
+    }
+}
+
+// retrive all users except you
+const getAllUsers = async(req,res)=>{
+    const loggedInUser = req.user.userId;
+    try {
+        const users = await User.find({_id:{$ne:loggedInUser}}).select(
+            'username profilePicture lastSeen isOnline about  phoneNumber phoneSuffix' 
+        ).lean();
+
+        const usersWithConversation = await Promise.all(
+            users.map(async (user)=>{
+                const conversation = await Conversation.findOne({
+                    // retrive conversations between otherusers & loggedin user
+                    participants : {$all : [loggedInUser,user?._id]}
+                }).populate({
+                    path:'lastMessage',
+                    select : 'content createdAt sender receiver'
+                }).lean();
+
+                return {
+                    ...user,
+                    conversation : conversation | null
+                }
+            }) 
+        )
+        response(res,200,'Users retrive successfull',usersWithConversation);
+    } catch (error) {
+        console.error(error);
+        response(res,500,'Internal server error');
+    }
+}
+
+
 module.exports = {
-    sendOtp,verifyOtp,updateProfile
+    sendOtp,verifyOtp,updateProfile,logout,checkAuthticate,getAllUsers
 }

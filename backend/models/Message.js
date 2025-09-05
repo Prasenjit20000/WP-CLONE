@@ -19,12 +19,12 @@ const messageSchema = new mongoose.Schema({
     content: {
         type: String
     },
-    imageOrVideoUrl: {
-        type: String
-    },
     contentType: {
         type: String,
         enum: ['image', 'text', 'video']
+    },
+    imageOrVideoUrl: {
+        type: String
     },
     reactions: [{
         user: {
@@ -33,11 +33,11 @@ const messageSchema = new mongoose.Schema({
         },
         emoji: String
     }],
-    messageStatus:{
-        type:String,
-        default:'send'
+    messageStatus: {
+        type: String,
+        default: 'send'
     }
-},{timestamps:true});
+}, { timestamps: true });
 
 const Message = mongoose.model('Message', messageSchema);
 module.exports = Message;
