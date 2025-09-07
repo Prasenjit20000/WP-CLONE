@@ -66,7 +66,17 @@ exports.sendMessage = async (req, res) => {
         const populatedMessage = await Message.findOne(message?._id)
             .populate('sender', 'username profilePicture')
             .populate('receiver', 'username profilePicture');
+        
 
+        // emit socket event for realtime
+        if(req.io && req.socketUserMap){
+            const receiverSocketId = req.socketUserMap.get(receiverId);
+            if(receiverSocketId){
+                req.io.to(receiverSocketId).emit('receive_message',populatedMessage);
+                message.messageStatus = 'delivered';
+                await message.save();
+            }
+        } 
         return response(res, 201, 'Message send successfully', populatedMessage);
     } catch (error) {
         console.error(error);
