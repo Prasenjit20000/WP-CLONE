@@ -165,6 +165,20 @@ exports.markAsRead = async(req,res) =>{
                 $set: {messageStatus:'read'}
             }
         );
+        // notify to original sender that the message is read
+        if(req.io && req.socketUserMap){
+            for(const message of messages){
+                const senderSocketId = req.socketUserMap.get(message.sender.toString());
+                if(senderSocketId){
+                    const updatedMessage = {
+                        _id : message._id,
+                        messageStatus : 'read'
+                    };
+                    req.io.to(senderSocketId).emit('message_read',updatedMessage);
+                    await message.save();
+                }
+            }
+        }
         return response(res,200,'Messages marked as read',messages);
     } catch (error) {
         console.error(error);
@@ -184,6 +198,13 @@ exports.deleteMessage = async(req,res) =>{
             return response(res,403,'User not authorized to delete this message');
         }
         await message.deleteOne();
+        if(req.io && req.socketUserMap){
+            const receiverSocketId = req.socketUserMap.get(message.receiver.toString());
+            if(receiverSocketId){
+                req.io.to(receiverSocketId).emit('message_deleted',messageId);
+            }
+        }
+
         return response(res,200,'Message deleted successfully.');
 
     } catch (error) {
