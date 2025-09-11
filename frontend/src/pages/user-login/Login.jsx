@@ -11,6 +11,8 @@ import { motion, spring } from 'framer-motion'
 import ReactCountryFlag from "react-country-flag";
 import { FaChevronDown, FaUser, FaWhatsapp } from 'react-icons/fa';
 import Spinner from '../../utils/Spinner';
+import { toast } from 'react-toastify';
+import { sendOtp, updateUserProfile, verifyOtp } from '../../services/user.service';
 
 // validation schema(using  use hook)
 const loginValidateSchema = yup
@@ -59,7 +61,7 @@ const Login = () => {
   const { theme, setTheme } = useThemeStore();
   const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedCountry, setSelectedCountry] = useState(countries[0]);
-  const [otp, setOtp] = useState('', '', '', '', '', '');
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [email, setEmail] = useState('');
   const [profilePicture, setProfilePicture] = useState(null);
   const [selectedAvatar, setSelectedAvatar] = useState(avatars[0]);
@@ -110,6 +112,121 @@ const Login = () => {
       country.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       country.dialCode.includes(searchTerm)
   )
+
+  const onLoginSubmit = async()=>{
+    try {
+      setLoading(true);
+      if(email){
+        const response = await sendOtp(null,null,email);
+        if(response.status === 'success'){
+          toast.info('OTP is sent to your email');
+          setUserPhoneData({email});
+          setStep(2); 
+        }
+      }else{
+        const response = await sendOtp(phoneNumber,selectedCountry.dialCode,null);
+        if(response.status === 'success'){
+          toast.info('OTP is send to your phone number');
+          setUserPhoneData({phoneNumber,phoneSuffix:selectedCountry.dialCode});
+          setStep(2);
+        }
+      }
+    } catch (error) {
+      console.log(error);
+      setError(error.message || 'Failed to send OTP')
+    }finally{
+      setLoading(false);
+    }
+  }
+
+  const onOtpSubmit = async()=>{
+    try {
+      setLoading(true);
+      // if otp send is successful then always usePhoneData have some value
+      if(!userPhoneData){
+        throw new Error('Phone or email data is missing');
+      }
+      const otpString = otp.join('');
+      let response;
+      if(userPhoneData?.email){
+        response = await verifyOtp(null,null,otpString,userPhoneData.email);
+      }else{
+        response = await verifyOtp(userPhoneData.phoneNumber,userPhoneData.phoneSuffix,otpString,null); 
+      }
+      if(response.status === 'success'){
+        toast.success('OTP verified successfully');
+        const user = response?.data?.user;
+        if(user?.username && user?.profilePicture){
+          // set user in state variable which can access by other components
+          setUser(user);
+          toast.success('Welcome back to Whatsapp');
+          navigate('/');
+          resetLoginState();
+        }else{
+          setStep(3);
+        }
+      }
+    } catch (error) {
+        console.log(error);
+        setError(error.message || 'Failed to verify OTP')
+    }finally{
+      setLoading(false);
+    }
+  }
+  // handle otp
+  // when enter a number in an otp box then automatically select the next blank box
+  // using this function 
+  const handleOtpChange = (index,value) =>{
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+    setOtpValue('otp',newOtp.join(''));
+    if(value && index<5){
+      document.getElementById(`otp-${index+1}`).focus();
+    }
+  } 
+
+  // handle back when form filling
+  const handleBack = () => {
+    setStep(1);
+    setUserPhoneData(null);
+    setOtp(['', '', '', '', '', '']);
+    setError('');
+  }
+
+  // handle profilepicture
+  const handleChange = (e) =>{
+    const file = e.target.files[0];
+    if(file){
+      setProfilePictureFile(file);
+      setProfilePicture(URL.createObjectURL(file)); //give url of that file which helps to preview before update
+    }
+  }
+
+  // step-3 try to profile update
+  const onProfileSubmit = async(data) =>{
+    try {
+      setLoading(true); 
+      const formData = new FormData();
+      formData.append('username',data.username);
+      formData.append('agreed',data.agreed);
+      if(profilePictureFile){
+        // instead of profilepicture use media in formdata because it same name as multer middleware
+        formData.append('media',profilePictureFile);
+      }else{
+        formData.append('profilePicture',selectedAvatar);
+      }
+      await updateUserProfile(formData);
+      toast.success('Welcome to Whatsapp');
+      navigate('/');
+      resetLoginState();
+    } catch (error) {
+      console.log(error);
+      setError(error.message || 'Failed to update user profile');
+    }finally{
+      setLoading(false);
+    }
+  }
   return (
     <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900' : 'bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center overflow-hidden p-4'}`}>
       <motion.div
@@ -133,11 +250,11 @@ const Login = () => {
         {
           error && <p className='text-red-500 text-center mb-4'>{error}</p>
         }
-
+        {/* upto this is common for 3 steps */}
 
         {
           step === 1 && (
-            <form className='space-y-4'>
+            <form className='space-y-4' onSubmit={handleLoginSubmit(onLoginSubmit)}>
               <p className={`text-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'} mb-4`}>Enter your phone number to receive an OTP</p>
               <div className='relative'>
                 <div className='flex'>
@@ -207,7 +324,7 @@ const Login = () => {
               {/* divider */}
               <div className='flex items-center my-4'>
                 <div className='flex-grow h-px bg-gray-300' />
-                <span className='mx-3 text-gray-500 text-sm font-medium'>Or</span>
+                <span className='mx-3 text-gray-500 text-sm font-medium'>or</span>
                 <div className='flex-grow h-px bg-gray-300' />
               </div>
 
